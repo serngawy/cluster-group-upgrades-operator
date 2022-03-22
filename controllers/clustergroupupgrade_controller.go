@@ -41,7 +41,9 @@ import (
 	viewv1beta1 "github.com/open-cluster-management/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	ranv1alpha1 "github.com/openshift-kni/cluster-group-upgrades-operator/api/v1alpha1"
 	utils "github.com/openshift-kni/cluster-group-upgrades-operator/controllers/utils"
+	configpolicyv1 "github.com/stolostron/config-policy-controller/api/v1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 )
 
 // ClusterGroupUpgradeReconciler reconciles a ClusterGroupUpgrade object
@@ -642,6 +644,7 @@ func (r *ClusterGroupUpgradeReconciler) doManagedPoliciesExist(
 	if err != nil {
 		return false, nil, nil, err
 	}
+	r.createManifestWorks(ctx, clusters[0], childPoliciesList)
 
 	// Go through all the child policies and split the namespace from the policy name.
 	// A child policy name has the name format parent_policy_namespace.parent_policy_name
@@ -1767,4 +1770,52 @@ func (r *ClusterGroupUpgradeReconciler) SetupWithManager(mgr ctrl.Manager) error
 		Owns(placementBindingUnstructured).
 		Owns(policyUnstructured).
 		Complete(r)
+}
+
+// Create manifestWorks for polices objTemp
+func (r *ClusterGroupUpgradeReconciler) createManifestWorks(
+	ctx context.Context, clusterName string, policies []policiesv1.Policy) (err error) {
+	manifestWorks := make(map[workv1.ManifestWork]int)
+
+	for _, policy := range policies {
+		// Create ManifestWork on namespace cluster with workload from previous step
+		manifestWork := &workv1.ManifestWork{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clusterName + "-" + policy.Metadata.Name,
+				Namespace: clusterName,
+			},
+			Spec: workv1.ManifestWorkSpec{
+				DeleteOption: workv1.DeleteOption{
+					PropagationPolicy: workv1.PropagationPolicy{
+						DeletePropagationPolicyType: workv1.DeletePropagationPolicyTypeOrphan,
+					},
+				},
+				Workload: workv1.ManifestsTemplate{
+					Manifests: []workv1.Manifest{},
+				},
+			},
+		}
+
+		for _, policyTemp := range policy.Spec.PolicyTemplates {
+			var obj runtime.Object
+			var scope conversion.Scope
+			err := runtime.Convert_runtime_RawExtension_To_runtime_Object(policyTemp.ObjectDefinition, obj, scope)
+			if err != nil {
+				r.Log.Info("Error ", policy.Metadata.Name, err)
+			}
+			configPolicy, err := obj.(*configpolicyv1.ConfigurationPolicy)
+
+			if err != nil {
+				r.Log.Info("Error ", configPolicy.Metadata.Name, err)
+			}
+			for _, objTemp := range configPolicy.Spec.ObjectTemplates {
+				manifestWork.Spec.Workload.Manifests = append(manifestWork.Spec.Workload.Manifests, objTemp)
+			}
+		}
+
+		r.Log.Info("DEBUG", "manifestWork", manifestWork)
+		manifestWorks = append(manifestWorks, manifestWork)
+	}
+	r.Log.Info("DEBUG", "manifestWorks", manifestWorks)
+	return nil
 }
