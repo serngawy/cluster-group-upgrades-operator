@@ -38,10 +38,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
 	viewv1beta1 "github.com/open-cluster-management/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	ranv1alpha1 "github.com/openshift-kni/cluster-group-upgrades-operator/api/v1alpha1"
 	utils "github.com/openshift-kni/cluster-group-upgrades-operator/controllers/utils"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
+	configpolicyv1 "open-cluster-management.io/config-policy-controller/api/v1"
 )
 
 // ClusterGroupUpgradeReconciler reconciles a ClusterGroupUpgrade object
@@ -643,6 +646,7 @@ func (r *ClusterGroupUpgradeReconciler) doManagedPoliciesExist(
 		return false, nil, nil, err
 	}
 
+	r.createManifestWorks(ctx, clusters[0], childPoliciesList)
 	// Go through all the child policies and split the namespace from the policy name.
 	// A child policy name has the name format parent_policy_namespace.parent_policy_name
 	// The policy map we are creating will be of format {"policy_name": "policy_namespace"}
@@ -1767,4 +1771,52 @@ func (r *ClusterGroupUpgradeReconciler) SetupWithManager(mgr ctrl.Manager) error
 		Owns(placementBindingUnstructured).
 		Owns(policyUnstructured).
 		Complete(r)
+}
+
+// Create manifestWorks for polices objTemp
+func (r *ClusterGroupUpgradeReconciler) createManifestWorks(
+	ctx context.Context, clusterName string, policies []policiesv1.Policy) (err error) {
+	manifestWorks := []workv1.ManifestWork{}
+
+	for _, policy := range policies {
+		// Create ManifestWork with PolicyNS.PolicyName on cluster namespace
+		manifestWork := workv1.ManifestWork{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      policy.Name,
+				Namespace: clusterName,
+			},
+			Spec: workv1.ManifestWorkSpec{
+				DeleteOption: &workv1.DeleteOption{
+					PropagationPolicy: workv1.DeletePropagationPolicyTypeOrphan,
+				},
+				Workload: workv1.ManifestsTemplate{
+					Manifests: []workv1.Manifest{},
+				},
+			},
+		}
+
+		for _, policyTemp := range policy.Spec.PolicyTemplates {
+			var configPolicy configpolicyv1.ConfigurationPolicy
+			err = json.Unmarshal(policyTemp.ObjectDefinition.Raw, &configPolicy)
+			if err != nil {
+				r.Log.Info("error innerObj cast")
+				return err
+			}
+			r.Log.Info("my", "configPolicy", configPolicy.Name)
+
+			manifests := []workv1.Manifest{}
+			for _, objTemp := range configPolicy.Spec.ObjectTemplates {
+				manifest := workv1.Manifest{
+					RawExtension: runtime.RawExtension{Raw: objTemp.ObjectDefinition.Raw},
+				}
+				manifests = append(manifests, manifest)
+			}
+			manifestWork.Spec.Workload.Manifests = manifests
+		}
+
+		r.Log.Info("my", "manifestWork", manifestWork)
+		manifestWorks = append(manifestWorks, manifestWork)
+	}
+	r.Log.Info("my", "manifestWorks", manifestWorks)
+	return nil
 }
