@@ -87,7 +87,7 @@ github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
-# github.com/google/go-cmp v0.5.5
+# github.com/google/go-cmp v0.5.6
 ## explicit; go 1.8
 github.com/google/go-cmp/cmp
 github.com/google/go-cmp/cmp/internal/diff
@@ -290,7 +290,7 @@ go.uber.org/zap/internal/bufferpool
 go.uber.org/zap/internal/color
 go.uber.org/zap/internal/exit
 go.uber.org/zap/zapcore
-# golang.org/x/crypto v0.0.0-20210220033148-5ea612d1eb83
+# golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b
 ## explicit; go 1.11
 golang.org/x/crypto/pkcs12
 golang.org/x/crypto/pkcs12/internal/rc2
@@ -667,6 +667,10 @@ kubevirt.io/qe-tools/pkg/polarion-xml
 # open-cluster-management.io/api v0.5.0
 ## explicit; go 1.15
 open-cluster-management.io/api/cluster/v1
+open-cluster-management.io/api/work/v1
+# open-cluster-management.io/config-policy-controller v0.6.0
+## explicit; go 1.17
+open-cluster-management.io/config-policy-controller/api/v1
 # sigs.k8s.io/controller-runtime v0.9.3-0.20210709165254-650ea59f19cc
 ## explicit; go 1.16
 sigs.k8s.io/controller-runtime
